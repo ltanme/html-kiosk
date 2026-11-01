@@ -1,0 +1,19 @@
+# 构建产物
+build/
+build-test/
+*.apk
+*.apk.idsig
+*.class
+*.dex
+
+# 本地签名材料：绝不入库
+keystore.jks
+.keystore-pass
+
+# 本地测试截图，只保留脚本用到的自检页
+verify/*
+!verify/tts-test.html
+
+# 系统 / 工具
+.DS_Store
+.claude/

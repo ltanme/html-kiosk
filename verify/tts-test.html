@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>发音 / TTS 自检</title>
+<style>
+  body{margin:0;padding:18px 22px;font-family:-apple-system,"Noto Sans SC",sans-serif;background:#f7f9fb;color:#20303f}
+  h1{font-size:20px;margin:0 0 12px}
+  .card{background:#fff;border:1px solid #dbe4ee;border-radius:12px;padding:14px 16px;margin-bottom:12px}
+  .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  input{flex:1;min-width:240px;padding:9px 11px;font-size:16px;border:1px solid #c8d5e2;border-radius:9px}
+  button{padding:9px 16px;font-size:16px;border:0;border-radius:9px;background:#2b6cb0;color:#fff;cursor:pointer}
+  button.ghost{background:#e8eff7;color:#2b6cb0}
+  pre{background:#0f1a24;color:#cfe3f7;padding:12px;border-radius:9px;font-size:13px;line-height:1.5;white-space:pre-wrap;margin:0}
+  .k{color:#7fd1ff}
+</style>
+</head>
+<body>
+<h1>发音 / TTS 自检</h1>
+
+<div class="card row">
+  <input id="txt" value="environment">
+  <button onclick="say(document.getElementById('txt').value)">发音</button>
+  <button class="ghost" onclick="say('The environment is very important for our future.')">整句</button>
+  <button class="ghost" onclick="speechSynthesis && speechSynthesis.cancel()">停止</button>
+</div>
+
+<div class="card"><pre id="log"></pre></div>
+
+<script>
+const logEl = document.getElementById('log');
+function log(msg, ok) {
+  const t = new Date().toTimeString().slice(0, 8);
+  logEl.textContent += '[' + t + '] ' + msg + '\n';
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+log('speechSynthesis 存在: ' + (!!window.speechSynthesis));
+log('SpeechSynthesisUtterance: ' + (typeof window.SpeechSynthesisUtterance));
+try {
+  const v = window.speechSynthesis ? window.speechSynthesis.getVoices() : [];
+  log('getVoices().length = ' + v.length);
+} catch (e) { log('getVoices 抛错: ' + e); }
+log('AndroidTTS 桥: ' + (typeof window.AndroidTTS));
+
+function say(txt) {
+  if (!window.speechSynthesis) { log('✗ 没有 speechSynthesis'); return; }
+  try {
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(txt);
+    u.lang = 'en-US'; u.rate = 0.9; u.pitch = 1;
+    u.onend = () => log('onend 触发');
+    speechSynthesis.speak(u);
+    log('✓ speak() 已调用: ' + JSON.stringify(txt));
+  } catch (e) { log('✗ speak 抛错: ' + e); }
+}
+</script>
+</body>
+</html>

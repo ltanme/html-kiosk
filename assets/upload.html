@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AI+自学 · 课件上传</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box}
+  :root{--ink:#0f2038;--muted:#6b7f99;--line:#e2ecf7;--blue:#1d4ed8;--teal:#0f8a86;--bg:#f4f8fd}
+  html,body{margin:0;min-height:100%}
+  body{background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    -webkit-font-smoothing:antialiased;font-size:14px;line-height:1.6}
+  .wrap{max-width:880px;margin:0 auto;padding:34px 20px 60px}
+  header{display:flex;align-items:center;gap:14px;margin-bottom:22px}
+  .badge{width:46px;height:46px;border-radius:14px;display:grid;place-items:center;color:#fff;font-weight:800;font-size:13px;
+    background:linear-gradient(135deg,#1d4ed8,#0f8a86);box-shadow:0 12px 24px -12px rgba(29,78,216,.8)}
+  h1{margin:0;font-size:24px;letter-spacing:-.02em;font-weight:800}
+  header p{margin:1px 0 0;color:var(--muted);font-size:12.5px}
+  .card{background:#fff;border:1px solid var(--line);border-radius:18px;padding:20px;margin-bottom:16px;
+    box-shadow:0 18px 40px -34px rgba(15,40,80,.7)}
+  .drop{border:2px dashed #c6d9ee;background:#fbfdff;text-align:center;padding:34px 20px;transition:.18s}
+  .drop.over{border-color:#1d4ed8;background:#f0f7ff}
+  .drop-icon{font-size:28px;color:#1d4ed8;margin-bottom:6px;font-weight:700}
+  .drop strong{display:block;font-size:16px;font-weight:750;margin-bottom:4px}
+  .drop span{display:block;color:var(--muted);font-size:12.5px}
+  .actions{display:flex;gap:10px;justify-content:center;margin-top:16px;flex-wrap:wrap}
+  button{font:inherit;cursor:pointer;border-radius:11px;transition:.16s}
+  .primary{height:42px;padding:0 20px;border:0;color:#fff;font-weight:700;font-size:13.5px;
+    background:linear-gradient(135deg,#1d4ed8,#0f8a86);box-shadow:0 14px 26px -16px rgba(29,78,216,.9)}
+  .primary:hover{filter:brightness(1.05)}
+  .ghost{height:42px;padding:0 18px;border:1px solid #dbe6f3;background:#fff;color:#284262;font-weight:600;font-size:13px}
+  .ghost:hover{background:#f6faff;border-color:#bcd2ea}
+  .head{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:12px}
+  .head strong{font-size:15px;font-weight:750}
+  .head span{font-size:11.5px;color:var(--muted)}
+  .queue,.files{display:grid;gap:9px}
+  .empty{color:#93a4b9;font-size:12.5px;padding:6px 2px}
+  .item{display:flex;align-items:center;gap:12px;padding:11px 13px;border:1px solid #e8f0fa;border-radius:12px;background:#fbfdff}
+  .item .nm{flex:1;min-width:0}
+  .item .nm b{display:block;font-size:13.5px;font-weight:650;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .item .nm small{display:block;color:#93a4b9;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .item .st{font-size:11.5px;color:#5f7893;white-space:nowrap}
+  .item .st.ok{color:#0f8a86;font-weight:650}
+  .item .st.err{color:#c2416b;font-weight:650}
+  .prog{height:5px;border-radius:99px;background:#e8f1fa;overflow:hidden;margin-top:6px}
+  .prog i{display:block;height:100%;width:0;border-radius:99px;background:linear-gradient(90deg,#1d4ed8,#0f8a86);transition:width .2s}
+  .item a{color:#1d4ed8;text-decoration:none;font-weight:600;font-size:12.5px;padding:6px 10px;border-radius:8px;border:1px solid #dbe6f3;background:#fff;white-space:nowrap}
+  .item a:hover{background:#f2f8ff}
+  .del{border:1px solid #f0d7de;background:#fff;color:#b03a5b;font-size:12px;padding:6px 10px;border-radius:8px}
+  .del:hover{background:#fdf3f6}
+  footer{color:#93a4b9;font-size:11.5px;line-height:1.8;margin-top:6px;word-break:break-all}
+  footer code{background:#eef4fb;border-radius:6px;padding:2px 6px;color:#5f7893}
+  .note{background:#f2f8ff;border:1px solid #dceaf9;border-radius:12px;padding:11px 14px;font-size:12px;color:#4a6178;margin-top:14px;line-height:1.75}
+  @media(max-width:520px){.wrap{padding:22px 14px 40px}h1{font-size:20px}.card{padding:16px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="badge">9090</div>
+    <div>
+      <h1>课件上传</h1>
+      <p>传到设备上，书库会自动刷新 · 不需要数据线</p>
+    </div>
+  </header>
+
+  <section class="card drop" id="drop">
+    <div class="drop-icon">⇪</div>
+    <strong>把文件拖进来</strong>
+    <span>支持任意 .html 及它同级的图片、CSS、JS · 中文文件名没问题</span>
+    <div class="actions">
+      <button class="primary" id="pickFiles">选择文件</button>
+      <button class="ghost" id="pickDir">选择整个文件夹</button>
+    </div>
+    <input type="file" id="fileInput" multiple hidden>
+    <input type="file" id="dirInput" webkitdirectory directory multiple hidden>
+  </section>
+
+  <section class="card">
+    <div class="head"><strong>上传队列</strong><span id="queueInfo">空闲</span></div>
+    <div class="queue" id="queue"><div class="empty">还没有待上传的文件</div></div>
+  </section>
+
+  <section class="card">
+    <div class="head"><strong>设备上的书库</strong><span id="listInfo">加载中…</span></div>
+    <div class="files" id="files"></div>
+    <div class="note">
+      上传完成后回到设备，书库会自动刷新；点页面即可全屏打开。
+      需要替换同名文件时直接再传一次即可覆盖。
+    </div>
+  </section>
+
+  <footer>上传目录：<code id="root">读取中…</code></footer>
+</div>
+
+<script>
+(function(){
+  'use strict';
+  var $ = function(s){ return document.querySelector(s); };
+  var queueEl = $('#queue'), filesEl = $('#files'), queueInfo = $('#queueInfo'), listInfo = $('#listInfo');
+  var pending = 0, done = 0, failed = 0;
+
+  function fmtSize(n){
+    if (n < 1024) return n + ' B';
+    if (n < 1024*1024) return (n/1024).toFixed(1) + ' KB';
+    return (n/1024/1024).toFixed(1) + ' MB';
+  }
+  function fmtTime(t){
+    var d = new Date(t);
+    var p = function(x){ return String(x).padStart(2,'0'); };
+    return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+' '+p(d.getHours())+':'+p(d.getMinutes());
+  }
+  function esc(s){ return String(s).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+  function viewUrl(path){ return '/view/' + path.split('/').map(encodeURIComponent).join('/'); }
+
+  function setQueueInfo(){
+    queueInfo.textContent = pending ? ('上传中 ' + done + '/' + (done+pending+failed)) : (failed ? '有 ' + failed + ' 个失败' : '空闲');
+  }
+
+  function addQueueRow(name, rel){
+    var row = document.createElement('div');
+    row.className = 'item';
+    row.innerHTML = '<div class="nm"><b>' + esc(name) + '</b><small>' + esc(rel) + '</small>' +
+      '<div class="prog"><i></i></div></div><div class="st">等待</div>';
+    if (queueEl.querySelector('.empty')) queueEl.innerHTML = '';
+    queueEl.appendChild(row);
+    return { row: row, bar: row.querySelector('.prog i'), st: row.querySelector('.st') };
+  }
+
+  function uploadOne(file, rel, ui){
+    return new Promise(function(resolve){
+      var xhr = new XMLHttpRequest();
+      xhr.open('POST', '/upload', true);
+      xhr.setRequestHeader('X-Filename', encodeURIComponent(rel));
+      xhr.upload.onprogress = function(e){
+        if (e.lengthComputable && ui) ui.bar.style.width = Math.min(100, e.loaded / e.total * 100) + '%';
+      };
+      xhr.onload = function(){
+        if (xhr.status === 200) resolve(true);
+        else resolve(false);
+      };
+      xhr.onerror = function(){ resolve(false); };
+      xhr.send(file);
+    });
+  }
+
+  async function uploadList(files){
+    if (!files || !files.length) return;
+    var list = Array.prototype.slice.call(files);
+    pending = 0; done = 0; failed = 0;
+    for (var i = 0; i < list.length; i++){
+      var f = list[i];
+      var rel = f.webkitRelativePath || f.name;
+      if (!rel || rel.indexOf('/') === 0) rel = rel.replace(/^\//, '');
+      var ui = addQueueRow(f.name, rel);
+      pending = list.length - done;
+      setQueueInfo();
+      ui.st.textContent = '上传中';
+      var ok = await uploadOne(f, rel, ui);
+      if (ok){
+        done++; ui.st.textContent = '完成'; ui.st.className = 'st ok';
+        ui.bar.style.width = '100%';
+      } else {
+        failed++; ui.st.textContent = '失败'; ui.st.className = 'st err';
+      }
+      setQueueInfo();
+    }
+    setTimeout(function(){
+      queueEl.innerHTML = '<div class="empty">本批已处理：成功 ' + done + (failed ? ' · 失败 ' + failed : '') + '</div>';
+      loadList();
+    }, 600);
+  }
+
+  async function loadList(){
+    try {
+      var res = await fetch('/api/list', { cache: 'no-store' });
+      var data = await res.json();
+      $('#root').textContent = data.root || '';
+      var files = data.files || [];
+      listInfo.textContent = files.length + ' 个页面';
+      if (!files.length){
+        filesEl.innerHTML = '<div class="empty">书库还是空的，先上传一个 HTML 吧</div>';
+        return;
+      }
+      filesEl.innerHTML = files.map(function(f){
+        return '<div class="item" data-path="' + esc(f.path) + '">' +
+          '<div class="nm"><b>' + esc(f.path) + '</b><small>' + fmtSize(f.size) + ' · ' + fmtTime(f.mtime) + '</small></div>' +
+          '<a href="' + viewUrl(f.path) + '" target="_blank" rel="noopener">预览</a>' +
+          '<button class="del">删除</button>' +
+        '</div>';
+      }).join('');
+    } catch (e) {
+      listInfo.textContent = '读取失败';
+      filesEl.innerHTML = '<div class="empty">连不上设备服务，请确认 App 正在运行</div>';
+    }
+  }
+
+  function wire(){
+    $('#pickFiles').onclick = function(){ $('#fileInput').click(); };
+    $('#pickDir').onclick = function(){ $('#dirInput').click(); };
+    $('#fileInput').onchange = function(e){ uploadList(e.target.files); e.target.value = ''; };
+    $('#dirInput').onchange = function(e){ uploadList(e.target.files); e.target.value = ''; };
+
+    var drop = $('#drop');
+    ['dragenter','dragover'].forEach(function(ev){
+      drop.addEventListener(ev, function(e){ e.preventDefault(); drop.classList.add('over'); });
+    });
+    ['dragleave','drop'].forEach(function(ev){
+      drop.addEventListener(ev, function(e){ e.preventDefault(); drop.classList.remove('over'); });
+    });
+    drop.addEventListener('drop', function(e){
+      if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length){
+        uploadList(e.dataTransfer.files);
+      }
+    });
+    window.addEventListener('dragover', function(e){ e.preventDefault(); });
+    window.addEventListener('drop', function(e){ e.preventDefault(); });
+
+    filesEl.addEventListener('click', async function(e){
+      var btn = e.target.closest('.del');
+      if (!btn) return;
+      var row = btn.closest('.item');
+      var path = row.getAttribute('data-path');
+      if (!confirm('删除「' + path + '」？')) return;
+      var res = await fetch('/api/delete?path=' + encodeURIComponent(path), { method: 'POST' });
+      if (res.ok) loadList();
+    });
+  }
+
+  wire();
+  loadList();
+  setInterval(loadList, 8000);
+})();
+</script>
+</body>
+</html>
