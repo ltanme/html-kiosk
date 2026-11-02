@@ -12,6 +12,17 @@ adb install -r "AI+自学.apk"
 - 包名：`com.local.htmlkiosk`
 - minSdk 26 / targetSdk 34，横屏、沉浸式全屏、保持常亮
 
+## 改名字
+
+App 名字只有一个来源，构建时传 `APP_NAME` 即可——桌面图标名、应用内标题、快捷方式、
+APK 文件名会一起变：
+
+```bash
+APP_NAME="新名字" ./build.sh
+```
+
+不传就用默认的 `AI+自学`。签名证书与名字无关，改名不需要换证书。
+
 ## 使用
 
 1. 打开 App，首页会显示 `http://<设备IP>:9090`

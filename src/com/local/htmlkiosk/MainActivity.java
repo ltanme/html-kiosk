@@ -235,7 +235,7 @@ public class MainActivity extends Activity {
 
         LinearLayout titleBox = new LinearLayout(this);
         titleBox.setOrientation(LinearLayout.VERTICAL);
-        titleBox.addView(text("AI+自学", 26, 0xFF0F2038, Typeface.BOLD));
+        titleBox.addView(text(getString(R.string.app_name), 26, 0xFF0F2038, Typeface.BOLD));
         titleBox.addView(text("上传任意 HTML，点开即全屏浏览", 13, 0xFF7B8CA3, Typeface.NORMAL));
         header.addView(titleBox, new LinearLayout.LayoutParams(0, WRAP, 1f));
 
@@ -523,8 +523,8 @@ public class MainActivity extends Activity {
             open.setAction(Intent.ACTION_MAIN);
             open.addCategory(Intent.CATEGORY_LAUNCHER);
             ShortcutInfo info = new ShortcutInfo.Builder(this, "kiosk")
-                    .setShortLabel("AI+自学")
-                    .setLongLabel("AI+自学 · 课件书库")
+                    .setShortLabel(getString(R.string.app_name))
+                    .setLongLabel(getString(R.string.app_name) + " · 课件书库")
                     .setIcon(Icon.createWithResource(this, iconRes))
                     .setIntent(open)
                     .build();

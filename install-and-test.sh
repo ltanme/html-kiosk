@@ -2,7 +2,8 @@
 # 设备插好后运行：装 APK、启动、上传 TTS 自检页、打开书库
 set -e
 ADB=${ADB:-adb}
-APK="$(dirname "$0")/AI+自学.apk"
+APP_NAME="${APP_NAME:-AI+自学}"
+APK="$(dirname "$0")/$APP_NAME.apk"
 PKG=com.local.htmlkiosk
 BOX=/sdcard/Android/data/$PKG/files/library
 
