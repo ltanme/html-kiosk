@@ -59,6 +59,8 @@ adb push --sync ~/课件/ /sdcard/Android/data/com.local.htmlkiosk/files/library
   - 顺带注入一段触摸脚本：B 站桌面播放器是「鼠标悬停在倍速按钮上就展开菜单」，
     手指第一下能触发一次合成的 mouseenter，第二下就没有了——「2.0x 想改回 1.5x」
     时菜单根本不弹。脚本让点按钮就展开并保持 20 秒，选档位/点别处再交还原逻辑
+  - 完整的排查过程、验证方法和备选方案见
+    [docs/B站内嵌播放器倍速修复.md](docs/B站内嵌播放器倍速修复.md)
 - **只放行 B 站外链**（bilibili.com / b23.tv / bilivideo.com / geetest.com 等），
   其它外部地址直接拦掉；已经处在 B 站页面时（扫码登录常弹安全验证、下载 App 之类）
   静默丢弃、不弹提示，避免打断登录流程
