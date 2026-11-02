@@ -17,3 +17,8 @@ verify/*
 # 系统 / 工具
 .DS_Store
 .claude/
+
+.idea/
+
+.iml
+/html-kiosk.iml
