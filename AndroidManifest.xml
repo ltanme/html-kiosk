@@ -31,11 +31,15 @@
             android:theme="@android:style/Theme.Material.Light.NoActionBar"
             android:configChanges="orientation|screenSize|smallestScreenSize|keyboardHidden|screenLayout|uiMode" />
 
-        <!-- 截图分享：自写的只读 provider，避免引入 androidx FileProvider -->
+        <!-- 截图分享：自写的只读 provider，避免引入 androidx FileProvider。
+             exported=true 是被豆包逼的：它的 OuterShareDeliverActivity 只转发 Intent，
+             真正读图的是随后启动的 ChatActivity；Activity 级的临时授权在转发页 finish
+             后就失效，显式 grantUriPermission 在这台机器上也没生效。
+             安全上只暴露 cache/shots/share-<随机 UUID>.png，见 ShotProvider.resolve()。 -->
         <provider
             android:name=".ShotProvider"
             android:authorities="com.local.htmlkiosk.shots"
-            android:exported="false"
+            android:exported="true"
             android:grantUriPermissions="true" />
 
         <activity

@@ -2,6 +2,7 @@ package com.local.htmlkiosk;
 
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.content.ClipData;
 import android.content.ContentValues;
 import android.content.Context;
 import android.content.DialogInterface;
@@ -41,6 +42,7 @@ import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * 截图标注页：整页缩放到屏幕内，手指画红笔标记，
@@ -127,7 +129,7 @@ public class ShotActivity extends Activity {
         LinearLayout titles = new LinearLayout(this);
         titles.setOrientation(LinearLayout.VERTICAL);
         TextView t1 = text("涂鸦标注", 16, 0xFF0F2038, Typeface.BOLD);
-        TextView t2 = text("单指涂鸦 · 双指缩放/上下滑 · 再发 ChatGPT", 11, 0xFF7B8CA3, Typeface.NORMAL);
+        TextView t2 = text("单指涂鸦 · 双指缩放/上下滑 · 可发 ChatGPT / 豆包", 11, 0xFF7B8CA3, Typeface.NORMAL);
         titles.addView(t1);
         titles.addView(t2);
         bar.addView(titles);
@@ -178,6 +180,12 @@ public class ShotActivity extends Activity {
             @Override
             public void onClick(View v) {
                 shareToChatGpt();
+            }
+        }));
+        bar.addView(btn("发给豆包", 0xFFFFFFFF, 0xFF2B6CFF, new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                shareToDoubao();
             }
         }));
         bar.addView(btn("关闭", 0xFF284262, 0xFFF4F8FD, new View.OnClickListener() {
@@ -231,13 +239,27 @@ public class ShotActivity extends Activity {
     // ----------------------------------------------------------------- share
 
     private void shareToChatGpt() {
+        shareTo("com.openai.chatgpt", null, "请帮我看看这张图。");
+    }
+
+    /**
+     * 豆包（字节）：显式走它的外部分享入口 OuterShareDeliverActivity。
+     * 这个 Activity 自己不读图，只把 Intent 转给随后启动的 ChatActivity；
+     * 让图片真能被读到的是 provider 对 share-<UUID>.png 的导出（见 AndroidManifest）。
+     */
+    private void shareToDoubao() {
+        shareTo("com.larus.nova", "com.larus.home.impl.OuterShareDeliverActivity", null);
+    }
+
+    private void shareTo(final String pkg, final String activity, final String text) {
         if (draw == null) return;
         final Bitmap out = draw.render();
         new Thread(new Runnable() {
             @Override
             public void run() {
                 File f = new File(ShotProvider.dir(ShotActivity.this),
-                        "share-" + System.currentTimeMillis() + ".png");
+                        // 随机 UUID：provider 已 exported，文件名不可被别的应用猜到
+                        "share-" + UUID.randomUUID() + ".png");
                 boolean ok = false;
                 try {
                     FileOutputStream os = new FileOutputStream(f);
@@ -261,10 +283,21 @@ public class ShotActivity extends Activity {
                         Intent send = new Intent(Intent.ACTION_SEND);
                         send.setType("image/png");
                         send.putExtra(Intent.EXTRA_STREAM, uri);
-                        send.putExtra(Intent.EXTRA_TEXT, "请帮我看看这张图。");
+                        // ClipData 才是系统下发临时读授权的依据。只放 EXTRA_STREAM 时，
+                        // 接收方把 Intent 转给下一个 Activity 后授权就断了——豆包正是
+                        // OuterShareDeliverActivity 转发给 ChatActivity 的两段式。
+                        send.setClipData(ClipData.newRawUri("screenshot", uri));
+                        if (text != null) send.putExtra(Intent.EXTRA_TEXT, text);
                         send.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
                         Intent direct = new Intent(send);
-                        direct.setPackage("com.openai.chatgpt");
+                        if (activity != null) direct.setClassName(pkg, activity);
+                        else direct.setPackage(pkg);
+                        // 再显式授权给目标包，普通接收方一次转发内就够用；豆包的两段式转发
+                        // 仍会丢授权，它能读到图靠的是 provider 导出 + 随机文件名。
+                        try {
+                            grantUriPermission(pkg, uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                        } catch (Throwable ignored) {
+                        }
                         try {
                             startActivity(direct);
                         } catch (Throwable t) {
@@ -274,6 +307,17 @@ public class ShotActivity extends Activity {
                                 toast("没有可用的分享应用");
                             }
                         }
+                        // 十分钟后收回授权，避免一直挂在系统里
+                        getWindow().getDecorView().postDelayed(new Runnable() {
+                            @Override
+                            public void run() {
+                                try {
+                                    revokeUriPermission(uri,
+                                            Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                                } catch (Throwable ignored) {
+                                }
+                            }
+                        }, 10 * 60 * 1000L);
                     }
                 });
             }

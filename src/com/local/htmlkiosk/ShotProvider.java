@@ -40,7 +40,10 @@ public class ShotProvider extends ContentProvider {
 
     private File resolve(Uri uri) throws FileNotFoundException {
         String name = uri != null ? uri.getLastPathSegment() : null;
-        if (name == null || name.isEmpty() || name.contains("/") || name.contains("..")) {
+        // provider 是 exported 的，只放行分享用的 share-<随机 UUID>.png，
+        // 目录里其它截图（shot-*.png）不允许被外部应用按名字读到。
+        if (name == null || name.isEmpty() || name.contains("/") || name.contains("..")
+                || !name.startsWith("share-")) {
             throw new FileNotFoundException("bad name");
         }
         File f = new File(dir(getContext()), name);

@@ -96,9 +96,14 @@ adb push --sync ~/课件/ /sdcard/Android/data/com.local.htmlkiosk/files/library
   （2/3/5/8 屏或到页面底部，自动拼接，PNG 无损原图）。截完进入标注页：
   单指红笔涂鸦，点「文字」在图上加红色小字；双指捏合放大/缩小、双指拖动查看长图，
   长图默认按宽度铺满、右侧有滚动条。可保存到相册（`Pictures/课件截图`），
-  或直接「发给 ChatGPT」（`ACTION_SEND` 带图 + 提示文字，失败回退系统分享面板）
+  或直接「发给 ChatGPT」（`ACTION_SEND` 带图 + 提示文字，失败回退系统分享面板）、
+  「发给豆包」（只带图不带文字：图片停在豆包输入框里等用户补充问题，不会直接发出去）
   - 分享用自写的只读 `ShotProvider`（`content://com.local.htmlkiosk.shots/…`），
-    项目不引 androidx，所以没用 FileProvider
+    项目不引 androidx，所以没用 FileProvider。豆包的外部分享页
+    `OuterShareDeliverActivity` 自己不读图，只把 Intent 转给主界面，Activity 级的
+    URI 临时授权在转发页 finish 后就失效（表现为豆包报 `Permission Denial`、
+    输入框里没有图）。因此 provider 声明为 exported，只放行
+    `share-<随机 UUID>.png` 这一种文件名，目录里其它截图仍然读不到
 
 ## 构建
 
