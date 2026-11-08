@@ -107,6 +107,8 @@ public class MainActivity extends Activity {
     private String ttsPendingText;
     private String ttsPendingLang;
     private float ttsPendingRate = 1f;
+    /** 已为哪个地址做过滚动恢复，避免 onPageFinished 重复触发时把用户拽回去。 */
+    private String scrollRestoredFor;
     private TextView floatBack;
     private TextView loadingView;
     private TextView biliBtn;
@@ -1034,6 +1036,22 @@ public class MainActivity extends Activity {
         }
     }
 
+    /**
+     * 暴露给网页：window.AndroidScroll.save(path, x, y)
+     * 记录本地课件的阅读位置（只认 /view/ 下的页面，外站一律忽略）。
+     */
+    private class ScrollBridge {
+        @JavascriptInterface
+        public void save(String path, int x, int y) {
+            try {
+                if (path == null || !path.startsWith("/view/") || path.length() > 500) return;
+                if (x < 0 || y < 0) return;
+                progress.edit().putString("pos:" + path, x + "," + y).apply();
+            } catch (Throwable ignored) {
+            }
+        }
+    }
+
     private void speakNow(String text, String lang, float rate) {
         Log.i("Kiosk", "speakNow text=" + text + " lang=" + lang + " rate=" + rate
                 + " tts=" + (tts == null ? "null" : "set") + " ready=" + ttsReady);
@@ -1100,6 +1118,60 @@ public class MainActivity extends Activity {
         if (view == null) return;
         try {
             view.evaluateJavascript(TTS_SHIM, null);
+        } catch (Throwable ignored) {
+        }
+    }
+
+    // ---------- 阅读位置记忆：滚动时上报，重新打开同一页时恢复 ----------
+
+    /** 只对本地课件页生效；滚动停止 400ms 后上报一次，避免频繁写盘。 */
+    private static final String SCROLL_SHIM =
+            "(function(){" +
+            " if (window.__kioskScroll) return;" +
+            " if (!location.pathname || location.pathname.indexOf('/view/') !== 0) return;" +
+            " window.__kioskScroll = 1;" +
+            " var lx=-1, ly=-1, t=null;" +
+            " function send(){ var x=Math.round(window.pageXOffset||0), y=Math.round(window.pageYOffset||0);" +
+            "   if (x===lx && y===ly) return;" +
+            "   if (y===0 && x===0 && ly<=0){ lx=x; ly=y; return; }" +
+            "   lx=x; ly=y;" +
+            "   try { window.AndroidScroll.save(location.pathname, x, y); } catch(e){} }" +
+            " function later(){ if(t) return; t=setTimeout(function(){ t=null; send(); }, 400); }" +
+            " window.addEventListener('scroll', later, {passive:true});" +
+            " window.addEventListener('pagehide', send);" +
+            " document.addEventListener('visibilitychange', function(){" +
+            "   if (document.visibilityState === 'hidden') send(); });" +
+            "})()";
+
+    private void injectScrollShim(WebView view) {
+        if (view == null) return;
+        try {
+            view.evaluateJavascript(SCROLL_SHIM, null);
+        } catch (Throwable ignored) {
+        }
+    }
+
+    /** 同一个地址只恢复一次；晚到的图片把页面撑高时再补一次滚动。 */
+    private void restoreScroll(WebView view, String url) {
+        try {
+            if (view == null || url == null) return;
+            if (!url.startsWith("http://127.0.0.1:" + PORT)) return;
+            if (url.indexOf('#') >= 0) return; // 页面自己的锚点优先
+            String path = Uri.parse(url).getEncodedPath();
+            if (path == null || !path.startsWith("/view/")) return;
+            String v = progress.getString("pos:" + path, null);
+            if (v == null) return;
+            int c = v.indexOf(',');
+            if (c <= 0) return;
+            int x = Integer.parseInt(v.substring(0, c));
+            int y = Integer.parseInt(v.substring(c + 1));
+            if (x < 0 || y < 0 || (x == 0 && y == 0)) return;
+            String js = "(function(){var x=" + x + ",y=" + y + ";"
+                    + "window.scrollTo(x,y);"
+                    + "setTimeout(function(){ if(window.pageYOffset < y-40) window.scrollTo(x,y); },450);"
+                    + "})()";
+            view.evaluateJavascript(js, null);
+            Log.i("Kiosk", "restore scroll " + path + " -> " + x + "," + y);
         } catch (Throwable ignored) {
         }
     }
@@ -1316,6 +1388,8 @@ public class MainActivity extends Activity {
         // WebView 不实现 Web Speech API，课件里的「点击发音」会直接报错。
         // 这里暴露一个极小的 TTS 桥，再用 JS 补一个 speechSynthesis 壳。
         webView.addJavascriptInterface(new TtsBridge(), "AndroidTTS");
+        // 阅读位置记忆：滚动时由页面脚本把位置报回来
+        webView.addJavascriptInterface(new ScrollBridge(), "AndroidScroll");
 
         webView.setWebViewClient(new WebViewClient() {
             @Override
@@ -1335,6 +1409,7 @@ public class MainActivity extends Activity {
             @Override
             public void onPageStarted(WebView view, String url, android.graphics.Bitmap favicon) {
                 currentUrl = url;
+                scrollRestoredFor = null;
                 showLoading(true);
                 injectTtsShim(view);
             }
@@ -1346,6 +1421,13 @@ public class MainActivity extends Activity {
                 injectTtsShim(view);
                 CookieManager.getInstance().flush();
                 boolean local = url != null && url.startsWith("http://127.0.0.1:" + PORT);
+                if (local) {
+                    injectScrollShim(view);
+                    if (!url.equals(scrollRestoredFor)) {
+                        scrollRestoredFor = url;
+                        restoreScroll(view, url);
+                    }
+                }
                 if (floatBack != null) floatBack.setText(local ? "‹ 书库" : "‹ 返回");
                 updateBiliState();
                 // 刚在登录页登录成功：自动回到原来要看的页面
