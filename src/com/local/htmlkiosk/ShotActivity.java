@@ -237,11 +237,12 @@ public class ShotActivity extends Activity {
             @Override
             public void run() {
                 File f = new File(ShotProvider.dir(ShotActivity.this),
-                        "share-" + System.currentTimeMillis() + ".jpg");
+                        "share-" + System.currentTimeMillis() + ".png");
                 boolean ok = false;
                 try {
                     FileOutputStream os = new FileOutputStream(f);
-                    ok = out.compress(Bitmap.CompressFormat.JPEG, 90, os);
+                    // 原图发送：PNG 无损
+                    ok = out.compress(Bitmap.CompressFormat.PNG, 100, os);
                     os.close();
                 } catch (Throwable t) {
                     ok = false;
@@ -258,7 +259,7 @@ public class ShotActivity extends Activity {
                         }
                         Uri uri = ShotProvider.uriFor(file.getName());
                         Intent send = new Intent(Intent.ACTION_SEND);
-                        send.setType("image/jpeg");
+                        send.setType("image/png");
                         send.putExtra(Intent.EXTRA_STREAM, uri);
                         send.putExtra(Intent.EXTRA_TEXT, "请帮我看看这张图。");
                         send.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
@@ -282,19 +283,19 @@ public class ShotActivity extends Activity {
     private void saveToGallery() {
         if (draw == null) return;
         Bitmap out = draw.render();
-        String name = "shot-" + System.currentTimeMillis() + ".jpg";
+        String name = "shot-" + System.currentTimeMillis() + ".png";
         try {
             if (Build.VERSION.SDK_INT >= 29) {
                 ContentValues v = new ContentValues();
                 v.put(MediaStore.Images.Media.DISPLAY_NAME, name);
-                v.put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg");
+                v.put(MediaStore.Images.Media.MIME_TYPE, "image/png");
                 v.put(MediaStore.Images.Media.RELATIVE_PATH,
                         Environment.DIRECTORY_PICTURES + "/课件截图");
                 Uri u = getContentResolver().insert(
                         MediaStore.Images.Media.EXTERNAL_CONTENT_URI, v);
                 if (u == null) throw new IllegalStateException("insert failed");
                 OutputStream os = getContentResolver().openOutputStream(u);
-                out.compress(Bitmap.CompressFormat.JPEG, 90, os);
+                out.compress(Bitmap.CompressFormat.PNG, 100, os);
                 os.close();
                 toast("已保存到相册 · Pictures/课件截图");
             } else {
@@ -303,7 +304,7 @@ public class ShotActivity extends Activity {
                 dir.mkdirs();
                 File f = new File(dir, name);
                 FileOutputStream os = new FileOutputStream(f);
-                out.compress(Bitmap.CompressFormat.JPEG, 90, os);
+                out.compress(Bitmap.CompressFormat.PNG, 100, os);
                 os.close();
                 toast("已保存：" + f.getAbsolutePath());
             }

@@ -2,11 +2,13 @@ package com.local.htmlkiosk;
 
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.app.Dialog;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.ActivityInfo;
 import android.content.pm.ShortcutInfo;
 import android.content.pm.ShortcutManager;
+import android.content.res.ColorStateList;
 import android.content.res.Configuration;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
@@ -14,8 +16,10 @@ import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Rect;
 import android.graphics.Typeface;
+import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.Icon;
+import android.graphics.drawable.RippleDrawable;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -30,6 +34,7 @@ import android.view.MotionEvent;
 import android.view.PixelCopy;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.Window;
 import android.view.WindowInsets;
 import android.view.WindowInsetsController;
 import android.view.WindowManager;
@@ -604,36 +609,253 @@ public class MainActivity extends Activity {
         root.addView(shotBtn);
     }
 
+    // 截图方式选择：两个大卡片 + 图标，不要做成普通列表弹窗
+    private static final int SHOT_BLUE = 0xFF2F80ED;
+    private static final int SHOT_BLUE_BG = 0xFFEAF3FF;
+    private static final int SHOT_ORANGE = 0xFFFF7A00;
+    private static final int SHOT_ORANGE_BG = 0xFFFFF3E6;
+
     private void showShotMenu() {
         if (webView == null) return;
-        new AlertDialog.Builder(this)
-                .setTitle("截图")
-                .setItems(new String[]{"截当前屏幕", "截长图（可选长度，JPG）"},
-                        new android.content.DialogInterface.OnClickListener() {
-                            @Override
-                            public void onClick(android.content.DialogInterface d, int which) {
-                                if (which == 0) captureViewport();
-                                else showLongMenu();
-                            }
-                        })
-                .setNegativeButton("取消", null)
-                .show();
+        final Dialog dialog = new Dialog(this);
+        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
+
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(26), dp(22), dp(26), dp(12));
+        GradientDrawable bg = rounded(0xFFFFFFFF, 24);
+        bg.setStroke(dp(1), 0x1A0F2038);
+        box.setBackground(bg);
+
+        box.addView(text("截图", 24, 0xFF102A43, Typeface.BOLD));
+        TextView sub = text("选择截图方式", 14, 0xFF6B7D96, Typeface.NORMAL);
+        LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(WRAP, WRAP);
+        slp.topMargin = dp(4);
+        slp.bottomMargin = dp(18);
+        box.addView(sub, slp);
+
+        View normal = shotCard(dialog, 0, "普通截图", "只截当前屏幕，马上可以标注",
+                SHOT_BLUE, SHOT_BLUE_BG, new Runnable() {
+                    @Override
+                    public void run() {
+                        captureViewport();
+                    }
+                });
+        LinearLayout.LayoutParams nlp = new LinearLayout.LayoutParams(MATCH, WRAP);
+        nlp.bottomMargin = dp(12);
+        box.addView(normal, nlp);
+
+        View longShot = shotCard(dialog, 1, "长截图", "可选 2～8 屏，向下自动拼接",
+                SHOT_ORANGE, SHOT_ORANGE_BG, new Runnable() {
+                    @Override
+                    public void run() {
+                        showLongMenu();
+                    }
+                });
+        box.addView(longShot, new LinearLayout.LayoutParams(MATCH, WRAP));
+
+        TextView cancel = text("取消", 16, 0xFF98A2B3, Typeface.NORMAL);
+        cancel.setGravity(Gravity.CENTER);
+        cancel.setPadding(0, dp(16), 0, dp(10));
+        cancel.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                dialog.dismiss();
+            }
+        });
+        box.addView(cancel, new LinearLayout.LayoutParams(MATCH, WRAP));
+
+        showShotDialog(dialog, box, 560);
     }
 
     /** 长截图从当前位置往下截，截多少屏由用户决定，不再一路滚到页顶。 */
     private void showLongMenu() {
-        new AlertDialog.Builder(this)
-                .setTitle("从当前位置向下截多少？")
-                .setItems(new String[]{"2 屏", "3 屏", "5 屏", "8 屏", "到页面底部"},
-                        new android.content.DialogInterface.OnClickListener() {
-                            @Override
-                            public void onClick(android.content.DialogInterface d, int which) {
-                                int[] screens = {2, 3, 5, 8, 0};
-                                captureLong(screens[which]);
-                            }
-                        })
-                .setNegativeButton("取消", null)
-                .show();
+        final Dialog dialog = new Dialog(this);
+        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
+
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(26), dp(22), dp(26), dp(12));
+        GradientDrawable bg = rounded(0xFFFFFFFF, 24);
+        bg.setStroke(dp(1), 0x1A0F2038);
+        box.setBackground(bg);
+
+        box.addView(text("长截图", 24, 0xFF102A43, Typeface.BOLD));
+        TextView sub = text("从当前位置向下截多少屏？", 14, 0xFF6B7D96, Typeface.NORMAL);
+        LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(WRAP, WRAP);
+        slp.topMargin = dp(4);
+        slp.bottomMargin = dp(18);
+        box.addView(sub, slp);
+
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        int[] screens = {2, 3, 5, 8};
+        for (int i = 0; i < screens.length; i++) {
+            final int n = screens[i];
+            TextView b = shotPill(n + " 屏", SHOT_ORANGE, SHOT_ORANGE_BG);
+            b.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    dialog.dismiss();
+                    ui.postDelayed(new Runnable() {
+                        @Override
+                        public void run() {
+                            captureLong(n);
+                        }
+                    }, 120);
+                }
+            });
+            LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(0, dp(52), 1f);
+            blp.rightMargin = i == screens.length - 1 ? 0 : dp(8);
+            row.addView(b, blp);
+        }
+        LinearLayout.LayoutParams rlp = new LinearLayout.LayoutParams(MATCH, WRAP);
+        rlp.bottomMargin = dp(10);
+        box.addView(row, rlp);
+
+        TextView all = shotPill("到页面底部", 0xFFFFFFFF, SHOT_ORANGE);
+        all.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                dialog.dismiss();
+                ui.postDelayed(new Runnable() {
+                    @Override
+                    public void run() {
+                        captureLong(0);
+                    }
+                }, 120);
+            }
+        });
+        box.addView(all, new LinearLayout.LayoutParams(MATCH, dp(52)));
+
+        TextView cancel = text("取消", 16, 0xFF98A2B3, Typeface.NORMAL);
+        cancel.setGravity(Gravity.CENTER);
+        cancel.setPadding(0, dp(16), 0, dp(10));
+        cancel.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                dialog.dismiss();
+            }
+        });
+        box.addView(cancel, new LinearLayout.LayoutParams(MATCH, WRAP));
+
+        showShotDialog(dialog, box, 600);
+    }
+
+    /** 白底圆角、居中、带遮罩；高度随内容。 */
+    private void showShotDialog(Dialog dialog, View content, int widthDp) {
+        dialog.setContentView(content);
+        Window win = dialog.getWindow();
+        if (win != null) {
+            win.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+            WindowManager.LayoutParams wlp = win.getAttributes();
+            wlp.dimAmount = 0.45f;
+            win.setAttributes(wlp);
+            win.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+            win.setGravity(Gravity.CENTER);
+        }
+        dialog.show();
+        if (win != null) win.setLayout(dp(widthDp), ViewGroup.LayoutParams.WRAP_CONTENT);
+    }
+
+    /** 截图菜单的大卡片：图标 + 标题 + 说明 + 右侧箭头，整块可点。 */
+    private View shotCard(final Dialog dialog, final int iconKind, String title, String desc,
+                          final int accent, int cardBg, final Runnable action) {
+        final LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(dp(16), dp(14), dp(16), dp(14));
+        row.setClickable(true);
+        GradientDrawable bg = rounded(cardBg, 18);
+        bg.setStroke(dp(2), withAlpha(accent, 0x66));
+        row.setBackground(new RippleDrawable(
+                ColorStateList.valueOf(withAlpha(accent, 0x33)), bg, null));
+
+        row.addView(shotIcon(iconKind, accent), new LinearLayout.LayoutParams(dp(56), dp(56)));
+
+        LinearLayout col = new LinearLayout(this);
+        col.setOrientation(LinearLayout.VERTICAL);
+        col.addView(text(title, 19, 0xFF102A43, Typeface.BOLD));
+        TextView d = text(desc, 13, 0xFF62748A, Typeface.NORMAL);
+        LinearLayout.LayoutParams dlp = new LinearLayout.LayoutParams(WRAP, WRAP);
+        dlp.topMargin = dp(3);
+        col.addView(d, dlp);
+        LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(0, WRAP, 1f);
+        clp.leftMargin = dp(14);
+        row.addView(col, clp);
+
+        row.addView(text("›", 26, accent, Typeface.BOLD));
+
+        row.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                dialog.dismiss();
+                ui.postDelayed(action, 120);
+            }
+        });
+        return row;
+    }
+
+    /** 长截图长度选项：圆角大按钮。 */
+    private TextView shotPill(String label, int textColor, int bgColor) {
+        TextView b = text(label, 17, textColor, Typeface.BOLD);
+        b.setGravity(Gravity.CENTER);
+        GradientDrawable g = rounded(bgColor, 14);
+        if (bgColor != SHOT_ORANGE) g.setStroke(dp(2), withAlpha(SHOT_ORANGE, 0x66));
+        b.setBackground(g);
+        b.setClickable(true);
+        return b;
+    }
+
+    private static int withAlpha(int color, int alpha) {
+        return (color & 0x00FFFFFF) | (alpha << 24);
+    }
+
+    /** 彩色圆底 + 白色相机 / 长页箭头图标。 */
+    private View shotIcon(final int kind, final int accent) {
+        View v = new View(this) {
+            private final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
+
+            @Override
+            protected void onDraw(Canvas c) {
+                float w = getWidth(), h = getHeight();
+                p.setStyle(Paint.Style.FILL);
+                p.setColor(accent);
+                c.drawCircle(w / 2f, h / 2f, Math.min(w, h) / 2f, p);
+                p.setColor(0xFFFFFFFF);
+                p.setStyle(Paint.Style.STROKE);
+                p.setStrokeWidth(dp(2.2f));
+                p.setStrokeCap(Paint.Cap.ROUND);
+                p.setStrokeJoin(Paint.Join.ROUND);
+                if (kind == 0) {
+                    // 相机
+                    float bw = w * 0.62f, bh = h * 0.40f;
+                    float l = (w - bw) / 2f, t = h * 0.32f;
+                    c.drawRoundRect(l, t, l + bw, t + bh, dp(5), dp(5), p);
+                    c.drawLine(w * 0.40f, t, w * 0.44f, h * 0.25f, p);
+                    c.drawLine(w * 0.44f, h * 0.25f, w * 0.60f, h * 0.25f, p);
+                    c.drawLine(w * 0.60f, h * 0.25f, w * 0.64f, t, p);
+                    c.drawCircle(w / 2f, t + bh / 2f, w * 0.115f, p);
+                    p.setStyle(Paint.Style.FILL);
+                    c.drawCircle(w * 0.69f, t + dp(6), dp(1.8f), p);
+                } else {
+                    // 长页面 + 向下箭头
+                    float pw = w * 0.34f, ph = h * 0.36f;
+                    float l = (w - pw) / 2f, t = h * 0.17f;
+                    c.drawRoundRect(l, t, l + pw, t + ph, dp(3), dp(3), p);
+                    float ly = t + ph * 0.24f;
+                    for (int i = 0; i < 3; i++) {
+                        c.drawLine(l + pw * 0.18f, ly, l + pw * 0.82f, ly, p);
+                        ly += ph * 0.24f;
+                    }
+                    float cx = w / 2f;
+                    c.drawLine(cx, h * 0.60f, cx, h * 0.79f, p);
+                    c.drawLine(cx, h * 0.79f, cx - w * 0.06f, h * 0.72f, p);
+                    c.drawLine(cx, h * 0.79f, cx + w * 0.06f, h * 0.72f, p);
+                }
+            }
+        };
+        return v;
     }
 
     private static final String JS_METRICS =
@@ -702,11 +924,12 @@ public class MainActivity extends Activity {
             @Override
             public void run() {
                 File file = new File(ShotProvider.dir(MainActivity.this),
-                        "shot-" + System.currentTimeMillis() + ".jpg");
+                        "shot-" + System.currentTimeMillis() + ".png");
                 boolean ok = false;
                 try {
                     FileOutputStream os = new FileOutputStream(file);
-                    ok = bmp.compress(Bitmap.CompressFormat.JPEG, 90, os);
+                    // 原图保存：PNG 无损，不再走 JPEG 压缩
+                    ok = bmp.compress(Bitmap.CompressFormat.PNG, 100, os);
                     os.close();
                 } catch (Throwable t) {
                     Log.w("Kiosk", "save shot failed: " + t);
@@ -855,7 +1078,7 @@ public class MainActivity extends Activity {
                     if (dest == null) {
                         double totalPx = (endY - startY) * pxScale;
                         float ds = 1f;
-                        ds = Math.min(ds, 1920f / tw);
+                        // 保留原始宽度；只有超高长图才按像素总量等比缩小，避免 OOM
                         ds = Math.min(ds, 8192f / (float) totalPx);
                         ds = Math.min(ds, (float) Math.sqrt(8000000f / (tw * totalPx)));
                         destScale = Math.max(0.05f, ds);
