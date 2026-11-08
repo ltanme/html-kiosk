@@ -3,11 +3,16 @@ package com.local.htmlkiosk;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.pm.ActivityInfo;
 import android.content.pm.ShortcutInfo;
 import android.content.pm.ShortcutManager;
 import android.content.res.Configuration;
+import android.graphics.Bitmap;
+import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.Paint;
+import android.graphics.Rect;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.Icon;
@@ -22,6 +27,7 @@ import android.util.Log;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.MotionEvent;
+import android.view.PixelCopy;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowInsets;
@@ -50,9 +56,13 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import org.json.JSONObject;
+
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.Inet4Address;
@@ -60,12 +70,14 @@ import java.net.InetAddress;
 import java.net.InterfaceAddress;
 import java.net.NetworkInterface;
 import java.net.URL;
+import java.security.MessageDigest;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.Date;
 import java.util.Enumeration;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -98,6 +110,11 @@ public class MainActivity extends Activity {
     private TextView floatBack;
     private TextView loadingView;
     private TextView biliBtn;
+    private TextView shotBtn;
+    /** 学习完成状态：key = "done:" + 文件内容 SHA-256。 */
+    private SharedPreferences progress;
+    /** 文件内容 hash 缓存：path|size|mtime → sha256，避免每次刷新都重算。 */
+    private final Map<String, String> hashCache = new HashMap<String, String>();
     /** 未登录时先弹登录页，登录成功后自动回到这个地址。 */
     private String pendingReturnUrl;
     private long lastLoginGate;
@@ -151,8 +168,11 @@ public class MainActivity extends Activity {
         root.setBackgroundColor(0xFFF4F8FD);
         setContentView(root);
 
+        progress = getSharedPreferences("progress", MODE_PRIVATE);
+
         buildHome();
         buildFloatBack();
+        buildShotBtn();
         buildLoadingView();
         startServer();
         refreshList();
@@ -410,10 +430,36 @@ public class MainActivity extends Activity {
 
         LinearLayout mid = new LinearLayout(this);
         mid.setOrientation(LinearLayout.VERTICAL);
+
+        // 学习完成状态：按文件内容 hash 存，同一份课件重传/改名都还是同一个状态
+        final String hash = hashOf(f);
+        final boolean[] done = {progress.getBoolean("done:" + hash, false)};
+        final TextView dot = new TextView(this);
+        dot.setGravity(Gravity.CENTER);
+        dot.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
+        dot.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        applyDoneDot(dot, done[0]);
+        dot.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                done[0] = !done[0];
+                progress.edit().putBoolean("done:" + hash, done[0]).apply();
+                applyDoneDot(dot, done[0]);
+            }
+        });
+        LinearLayout.LayoutParams dlp = new LinearLayout.LayoutParams(dp(30), dp(30));
+        dlp.rightMargin = dp(10);
+
+        LinearLayout titleRow = new LinearLayout(this);
+        titleRow.setOrientation(LinearLayout.HORIZONTAL);
+        titleRow.setGravity(Gravity.CENTER_VERTICAL);
+        titleRow.addView(dot, dlp);
+
         TextView name = text(f.getName(), 16, 0xFF0F2038, Typeface.BOLD);
         name.setSingleLine(true);
         name.setEllipsize(TextUtils.TruncateAt.MIDDLE);
-        mid.addView(name);
+        titleRow.addView(name, new LinearLayout.LayoutParams(0, WRAP, 1f));
+        mid.addView(titleRow);
 
         String dir = rel.contains("/") ? rel.substring(0, rel.lastIndexOf('/')) : "书库根目录";
         TextView meta = text(dir + " · " + fmtSize(f.length()) + " · " + fmtTime(f.lastModified()),
@@ -439,6 +485,53 @@ public class MainActivity extends Activity {
             }
         });
         return row;
+    }
+
+    /** 完成状态圆点：未完成是空心圈，完成后是绿色实心 + 白勾。 */
+    private void applyDoneDot(TextView dot, boolean done) {
+        GradientDrawable d = new GradientDrawable();
+        d.setShape(GradientDrawable.OVAL);
+        if (done) {
+            d.setColor(0xFF16A34A);
+            dot.setText("✓");
+            dot.setTextColor(0xFFFFFFFF);
+        } else {
+            d.setColor(0xFFFFFFFF);
+            d.setStroke(dp(2), 0xFFC6D9EE);
+            dot.setText("");
+        }
+        dot.setBackground(d);
+        dot.setContentDescription(done ? "已完成，点击取消" : "未完成，点击标记完成");
+    }
+
+    /** 文件内容 SHA-256：按内容而不是文件名记状态，改名/重传都不丢。 */
+    private String hashOf(File f) {
+        String key = f.getAbsolutePath() + "|" + f.length() + "|" + f.lastModified();
+        String cached = hashCache.get(key);
+        if (cached != null) return cached;
+        String h;
+        InputStream in = null;
+        try {
+            MessageDigest md = MessageDigest.getInstance("SHA-256");
+            in = new FileInputStream(f);
+            byte[] buf = new byte[65536];
+            int n;
+            while ((n = in.read(buf)) > 0) md.update(buf, 0, n);
+            byte[] d = md.digest();
+            StringBuilder sb = new StringBuilder(d.length * 2);
+            for (byte b : d) sb.append(String.format(Locale.ROOT, "%02x", b));
+            h = sb.toString();
+        } catch (Throwable t) {
+            h = "fallback:" + f.length() + ":" + f.getName();
+        } finally {
+            if (in != null) try {
+                in.close();
+            } catch (Throwable ignored) {
+            }
+        }
+        if (hashCache.size() > 500) hashCache.clear();
+        hashCache.put(key, h);
+        return h;
     }
 
     private void confirmDelete(final File f, String rel) {
@@ -483,6 +576,323 @@ public class MainActivity extends Activity {
             }
         });
         root.addView(floatBack);
+    }
+
+    // --------------------------------------------------------------- capture
+
+    private void buildShotBtn() {
+        shotBtn = text("截图", 14, 0xFF173352, Typeface.BOLD);
+        shotBtn.setPadding(dp(16), dp(9), dp(18), dp(9));
+        GradientDrawable d = rounded(0xE6FFFFFF, 99);
+        d.setStroke(dp(1), 0x220F2038);
+        shotBtn.setBackground(d);
+        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(WRAP, WRAP);
+        lp.rightMargin = dp(18);
+        lp.bottomMargin = dp(18);
+        lp.gravity = Gravity.BOTTOM | Gravity.END;
+        shotBtn.setLayoutParams(lp);
+        shotBtn.setElevation(dp(6));
+        shotBtn.setVisibility(View.GONE);
+        shotBtn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                showShotMenu();
+            }
+        });
+        root.addView(shotBtn);
+    }
+
+    private void showShotMenu() {
+        if (webView == null) return;
+        new AlertDialog.Builder(this)
+                .setTitle("截图")
+                .setItems(new String[]{"截当前屏幕", "截长图（可选长度，JPG）"},
+                        new android.content.DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(android.content.DialogInterface d, int which) {
+                                if (which == 0) captureViewport();
+                                else showLongMenu();
+                            }
+                        })
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
+    /** 长截图从当前位置往下截，截多少屏由用户决定，不再一路滚到页顶。 */
+    private void showLongMenu() {
+        new AlertDialog.Builder(this)
+                .setTitle("从当前位置向下截多少？")
+                .setItems(new String[]{"2 屏", "3 屏", "5 屏", "8 屏", "到页面底部"},
+                        new android.content.DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(android.content.DialogInterface d, int which) {
+                                int[] screens = {2, 3, 5, 8, 0};
+                                captureLong(screens[which]);
+                            }
+                        })
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
+    private static final String JS_METRICS =
+            "(function(){var d=document.documentElement,b=document.body;"
+                    + "var h=Math.max(d?d.scrollHeight:0,b?b.scrollHeight:0);"
+                    + "var vh=window.innerHeight||(d?d.clientHeight:0);"
+                    + "var y=window.pageYOffset||(d?d.scrollTop:0);"
+                    + "var w=window.innerWidth||(d?d.clientWidth:0);"
+                    + "return {h:h,vh:vh,y:y,w:w};})()";
+
+    /** 截图时把自己浮在上面的按钮藏起来，否则会被一起截进去。 */
+    private void beforeCapture() {
+        if (floatBack != null) floatBack.setVisibility(View.INVISIBLE);
+        if (shotBtn != null) shotBtn.setVisibility(View.INVISIBLE);
+        if (loadingView != null) loadingView.setVisibility(View.GONE);
+    }
+
+    private void afterCapture() {
+        if (!readerOpen) return;
+        if (floatBack != null) floatBack.setVisibility(View.VISIBLE);
+        if (shotBtn != null) shotBtn.setVisibility(View.VISIBLE);
+    }
+
+    private void captureViewport() {
+        final WebView v = webView;
+        if (v == null) return;
+        beforeCapture();
+        ui.postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                captureViewportNow(v);
+            }
+        }, 200);
+    }
+
+    /** 用 PixelCopy 抓窗口里的实际画面，比 WebView.draw() 可靠。 */
+    private void captureViewportNow(final WebView v) {
+        int[] loc = new int[2];
+        v.getLocationInWindow(loc);
+        int w = v.getWidth();
+        int h = v.getHeight();
+        if (w <= 0 || h <= 0) {
+            afterCapture();
+            toast("截图失败：页面尺寸异常");
+            return;
+        }
+        final Bitmap bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
+        Rect rect = new Rect(loc[0], loc[1], loc[0] + w, loc[1] + h);
+        PixelCopy.request(getWindow(), rect, bmp, new PixelCopy.OnPixelCopyFinishedListener() {
+            @Override
+            public void onPixelCopyFinished(int result) {
+                afterCapture();
+                if (result == PixelCopy.SUCCESS) {
+                    deliverShot(bmp);
+                } else {
+                    bmp.recycle();
+                    toast("截图失败（" + result + "）");
+                }
+            }
+        }, ui);
+    }
+
+    private void deliverShot(final Bitmap bmp) {
+        toast("正在生成截图…");
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                File file = new File(ShotProvider.dir(MainActivity.this),
+                        "shot-" + System.currentTimeMillis() + ".jpg");
+                boolean ok = false;
+                try {
+                    FileOutputStream os = new FileOutputStream(file);
+                    ok = bmp.compress(Bitmap.CompressFormat.JPEG, 90, os);
+                    os.close();
+                } catch (Throwable t) {
+                    Log.w("Kiosk", "save shot failed: " + t);
+                }
+                bmp.recycle();
+                final boolean good = ok;
+                ui.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (!good) {
+                            toast("截图保存失败");
+                            return;
+                        }
+                        Intent i = new Intent(MainActivity.this, ShotActivity.class);
+                        i.putExtra("path", file.getAbsolutePath());
+                        startActivity(i);
+                    }
+                });
+            }
+        }, "shot-save").start();
+    }
+
+    private void captureLong(final int screens) {
+        final WebView v = webView;
+        if (v == null) return;
+        beforeCapture();
+        v.evaluateJavascript(JS_METRICS, new ValueCallback<String>() {
+            @Override
+            public void onReceiveValue(String value) {
+                double h = 0, vh = 0, y = 0, w = 0;
+                try {
+                    JSONObject o = new JSONObject(value);
+                    h = o.optDouble("h", 0);
+                    vh = o.optDouble("vh", 0);
+                    y = o.optDouble("y", 0);
+                    w = o.optDouble("w", 0);
+                } catch (Throwable ignored) {
+                }
+                if (h <= 0 || vh <= 0 || w <= 0) {
+                    toast("读取页面尺寸失败，改为截当前屏");
+                    captureViewportNow(v);
+                    return;
+                }
+                // 从用户当前看到的位置开始往下截，screens=0 表示一直截到页面底部
+                double start = Math.max(0, Math.min(y, Math.max(0, h - vh)));
+                double end = screens > 0 ? Math.min(h, start + screens * vh) : h;
+                if (end - start <= vh * 1.02) {
+                    captureViewportNow(v);
+                    return;
+                }
+                new LongShot(v, start, end, vh, w).start();
+            }
+        });
+    }
+
+    private static double parseNum(String s, double fallback) {
+        if (s == null) return fallback;
+        try {
+            return Double.parseDouble(s.replace("\"", "").trim());
+        } catch (Throwable t) {
+            return fallback;
+        }
+    }
+
+    private void scrollToCss(double y) {
+        if (webView == null) return;
+        String js = "(function(){try{document.documentElement.style.scrollBehavior='auto';}catch(e){}"
+                + "window.scrollTo(0," + y + ");})()";
+        webView.evaluateJavascript(js, new ValueCallback<String>() {
+            @Override
+            public void onReceiveValue(String value) {
+            }
+        });
+    }
+
+    /** 从 startY 开始，一屏一屏抓到 endY，再拼成一张长图。 */
+    private class LongShot {
+        private final WebView v;
+        private final double startY, endY, viewH, cssW;
+        private Bitmap dest;
+        private float destScale;
+        private double lastY = -1;
+        private int tiles;
+
+        LongShot(WebView v, double startY, double endY, double viewH, double cssW) {
+            this.v = v;
+            this.startY = startY;
+            this.endY = endY;
+            this.viewH = viewH;
+            this.cssW = cssW;
+        }
+
+        void start() {
+            scrollAndGrab(startY);
+        }
+
+        private void scrollAndGrab(final double y) {
+            String js = "(function(){try{document.documentElement.style.scrollBehavior='auto';}catch(e){}"
+                    + "window.scrollTo(0," + y + ");"
+                    + "return window.pageYOffset||document.documentElement.scrollTop||0;})()";
+            v.evaluateJavascript(js, new ValueCallback<String>() {
+                @Override
+                public void onReceiveValue(String s) {
+                    final double actual = parseNum(s, y);
+                    // 给渲染和懒加载留一点时间
+                    ui.postDelayed(new Runnable() {
+                        @Override
+                        public void run() {
+                            grab(actual);
+                        }
+                    }, 320);
+                }
+            });
+        }
+
+        private void grab(final double actualY) {
+            if (lastY >= 0 && actualY <= lastY + 0.5) {
+                finish(true); // 滚不动了（内部滚动容器），能拼多少算多少
+                return;
+            }
+            if (++tiles > 40) {
+                finish(true);
+                return;
+            }
+            lastY = actualY;
+
+            int[] loc = new int[2];
+            v.getLocationInWindow(loc);
+            final int tw = v.getWidth();
+            final int th = v.getHeight();
+            if (tw <= 0 || th <= 0) {
+                finish(false);
+                return;
+            }
+            final Bitmap tile = Bitmap.createBitmap(tw, th, Bitmap.Config.ARGB_8888);
+            Rect r = new Rect(loc[0], loc[1], loc[0] + tw, loc[1] + th);
+            PixelCopy.request(getWindow(), r, tile, new PixelCopy.OnPixelCopyFinishedListener() {
+                @Override
+                public void onPixelCopyFinished(int result) {
+                    if (result != PixelCopy.SUCCESS) {
+                        tile.recycle();
+                        finish(false);
+                        return;
+                    }
+                    float pxScale = tw / (float) cssW;
+                    if (dest == null) {
+                        double totalPx = (endY - startY) * pxScale;
+                        float ds = 1f;
+                        ds = Math.min(ds, 1920f / tw);
+                        ds = Math.min(ds, 8192f / (float) totalPx);
+                        ds = Math.min(ds, (float) Math.sqrt(8000000f / (tw * totalPx)));
+                        destScale = Math.max(0.05f, ds);
+                        int dw = Math.max(1, Math.round(tw * destScale));
+                        int dh = Math.max(1, Math.round((float) totalPx * destScale));
+                        dest = Bitmap.createBitmap(dw, dh, Bitmap.Config.ARGB_8888);
+                    }
+                    int dstY = Math.round((float) ((actualY - startY) * pxScale * destScale));
+                    int dstH = Math.round(th * destScale);
+                    if (dstY < dest.getHeight()) {
+                        int cut = Math.min(dstH, dest.getHeight() - dstY);
+                        int srcH = Math.min(th, Math.max(1, Math.round(cut / destScale)));
+                        Rect src = new Rect(0, 0, tw, srcH);
+                        Rect dst = new Rect(0, dstY, dest.getWidth(), dstY + cut);
+                        Canvas c = new Canvas(dest);
+                        c.drawBitmap(tile, src, dst, new Paint(Paint.FILTER_BITMAP_FLAG));
+                    }
+                    tile.recycle();
+
+                    double next = actualY + viewH;
+                    if (next < endY - 1) {
+                        scrollAndGrab(next);
+                    } else {
+                        finish(true);
+                    }
+                }
+            }, ui);
+        }
+
+        private void finish(boolean ok) {
+            scrollToCss(startY);
+            afterCapture();
+            if (ok && dest != null) {
+                deliverShot(dest);
+            } else {
+                if (dest != null) dest.recycle();
+                toast("长截图失败");
+            }
+        }
     }
 
     private void buildLoadingView() {
@@ -553,6 +963,7 @@ public class MainActivity extends Activity {
         homeScroll.setVisibility(View.GONE);
         webView.setVisibility(View.VISIBLE);
         readerOpen = true;
+        if (shotBtn != null) shotBtn.setVisibility(View.VISIBLE);
         showLoading(true);
         webView.loadUrl(url);
         pokeBackPill();
@@ -565,6 +976,7 @@ public class MainActivity extends Activity {
             floatBack.setVisibility(View.GONE);
             floatBack.setAlpha(0f);
         }
+        if (shotBtn != null) shotBtn.setVisibility(View.GONE);
         readerOpen = false;
         showLoading(false);
         // 直接销毁 WebView，而不是 loadUrl("about:blank")：
@@ -998,6 +1410,7 @@ public class MainActivity extends Activity {
                     floatBack.setVisibility(View.GONE);
                     floatBack.setAlpha(0f);
                 }
+                if (shotBtn != null) shotBtn.setVisibility(View.GONE);
                 homeScroll.setVisibility(View.VISIBLE);
                 refreshList();
                 toast(crashed ? "页面渲染出错，已返回书库" : "内存不足，页面已关闭");

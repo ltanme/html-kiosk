@@ -85,6 +85,16 @@ adb push --sync ~/课件/ /sdcard/Android/data/com.local.htmlkiosk/files/library
 - 左下角「‹ 书库」常驻淡显，单击回书库；打开新页面时会先显示「正在打开…」
 - 关闭阅读器时直接销毁 WebView：不残留历史（避免返回退到 about:blank 白屏），
   同时把大页面的内存还给系统；渲染进程被系统回收时会自动退回书库而不是留白屏
+- **学习完成状态**：书库每项标题前有一个圆点，点一下变绿色实心勾，再点取消。
+  状态按文件内容的 SHA-256 存储（`SharedPreferences: progress`），文件改名、重新上传
+  都不会丢
+- **截图与标注**：阅读页右下角「截图」，可截当前屏幕，或从当前位置向下截长图
+  （2/3/5/8 屏或到页面底部，自动拼接，JPG 90%）。截完进入标注页：
+  单指红笔涂鸦，点「文字」在图上加红色小字；双指捏合放大/缩小、双指拖动查看长图，
+  长图默认按宽度铺满、右侧有滚动条。可保存到相册（`Pictures/课件截图`），
+  或直接「发给 ChatGPT」（`ACTION_SEND` 带图 + 提示文字，失败回退系统分享面板）
+  - 分享用自写的只读 `ShotProvider`（`content://com.local.htmlkiosk.shots/…`），
+    项目不引 androidx，所以没用 FileProvider
 
 ## 构建
 

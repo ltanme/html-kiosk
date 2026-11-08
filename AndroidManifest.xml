@@ -25,6 +25,20 @@
         android:supportsRtl="true">
 
         <activity
+            android:name=".ShotActivity"
+            android:exported="false"
+            android:screenOrientation="sensorLandscape"
+            android:theme="@android:style/Theme.Material.Light.NoActionBar"
+            android:configChanges="orientation|screenSize|smallestScreenSize|keyboardHidden|screenLayout|uiMode" />
+
+        <!-- 截图分享：自写的只读 provider，避免引入 androidx FileProvider -->
+        <provider
+            android:name=".ShotProvider"
+            android:authorities="com.local.htmlkiosk.shots"
+            android:exported="false"
+            android:grantUriPermissions="true" />
+
+        <activity
             android:name=".MainActivity"
             android:exported="true"
             android:launchMode="singleTask"
